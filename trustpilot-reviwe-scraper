@@ -1,0 +1,62 @@
+import scrapy
+
+
+class ReviewScraperSpider(scrapy.Spider):
+    name = "review_scraper"
+    allowed_domains = ["trustpilot.com"]
+    
+    def start_requests(self):
+        yield scrapy.Request(url="https://www.trustpilot.com/categories",callback=self.parse)
+
+    def parse(self, response):
+        print("[ScrapeOps] Using headers:", response.request.headers)
+        
+        print(response.body)
+
+        category_links = response.xpath("//li[@class='styles_linkItem__HAUge']/a/@href").getall()
+        for link in category_links:
+            abs_link = response.urljoin(link)
+            print(f"Processing category link : {abs_link}")
+            yield scrapy.Request(url=abs_link,callback=self.parse_category)
+            
+            
+    
+    def parse_category(self,response):
+        print("Reached category page")
+        product_links = response.xpath("//a[@name='business-unit-card']/@href").getall()
+        for link in product_links:
+            abs_link = response.urljoin(link)
+            print(f"Processing product link : {abs_link}")
+            yield scrapy.Request(url=abs_link,callback=self.parse_product)
+        
+        next_page=response.xpath('//a[@aria-label="Next page"]/@href').get()
+        if(next_page):
+            abs_next_page=response.urljoin(next_page)
+            print(f"Processing next page link {abs_next_page}")
+            yield scrapy.Request(url=abs_next_page,callback=self.parse_category)
+                  
+
+
+    def parse_product(self,response):
+        print("Reached product page")
+        
+        review_boxes = response.xpath("//article[@data-service-review-card-paper='true']")
+        
+        for each_review_box in review_boxes:
+            reviewer_name= each_review_box.xpath(".//span[@data-consumer-name-typography]/text()").get()       
+            reviewer_text= each_review_box.xpath(".//p[@data-relevant-review-text-typography]/text()").get()      
+            reviewer_date= each_review_box.xpath('.//time[@data-service-review-date-time-ago="true"]/text()').get() 
+                 
+            
+            yield{
+            "reviewer_name":reviewer_name,
+            "reviewer_text":reviewer_text,
+            "reviewer_date":reviewer_date,
+            "Product-Url":response.url
+                }     
+        
+        next_page=response.xpath('//a[@aria-label="Next page"]/@href').get()
+        if(next_page):
+            abs_next_page=response.urljoin(next_page)
+            print(f"Processing next product page {abs_next_page}")
+            yield scrapy.Request(url=abs_next_page,callback=self.parse_product)        
